@@ -10,6 +10,7 @@ import { IDisposable, IConfigReader } from './core';
 import { MochaOpts } from 'vscode-test-adapter-remoting-util/out/mocha';
 import { MochaOptsReader, MochaOptsAndFiles } from './optsReader';
 import { configKeys, OnChange, configSection } from './configKeys';
+import { isPnpFn, pnpRequire, trySetupPnp } from './pnpapi'
 
 export type EnvVars = { [envVar: string]: string | null };
 
@@ -529,16 +530,25 @@ export class ConfigReader implements IConfigReader, IDisposable {
 		const configuredMochaPath = config.get<string | null>(configKeys.mochaPath.key);
 
 		if (configuredMochaPath === 'default') {
-
-			const localMochaPath = path.resolve(this.workspaceFolder.uri.fsPath, 'node_modules/mocha');
-			const hasLocalMocha = await new Promise<boolean>(resolve => {
-				fs.stat(localMochaPath, (err, stats) => {
-					resolve(!err && stats.isDirectory());
+			trySetupPnp(this.workspaceFolder.uri.fsPath);
+			this.log.debug(`isPnp = ${isPnpFn()}`);
+			if(!isPnpFn()){
+				const localMochaPath = path.resolve(this.workspaceFolder.uri.fsPath, 'node_modules/mocha');
+				const hasLocalMocha = await new Promise<boolean>(resolve => {
+					fs.stat(localMochaPath, (err, stats) => {
+						resolve(!err && stats.isDirectory());
+					});
 				});
-			});
 
-			if (hasLocalMocha) {
-				return localMochaPath;
+				if (hasLocalMocha) {
+					return localMochaPath;
+				}
+			} else {
+				const localMochaPath = pnpRequire.resolve('mocha');
+				
+				if (localMochaPath) {
+					return path.dirname(localMochaPath);
+				}
 			}
 
 		} else if (configuredMochaPath) {

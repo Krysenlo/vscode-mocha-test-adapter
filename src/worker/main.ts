@@ -9,6 +9,7 @@ import { patchMocha } from './patchMocha';
 import { processTests } from './processTests';
 import ReporterFactory from './reporter';
 import { fileExists } from '../util';
+import { trySetupPnp } from '../pnpapi'
 
 export default (async () => {
 
@@ -62,6 +63,11 @@ async function execute(args: WorkerArgs, sendMessage: (message: any) => Promise<
 	try {
 
 		process.chdir(args.cwd);
+
+		if (args.mochaPath && !fs.existsSync(args.mochaPath)) {
+			// if mochaPath is something like `F:\path\to\the\workspace\.yarn\cache\mocha-npm-8.3.2-8bcae4bcf7-ac4f359cf4.zip\node_modules\mocha` is NOT true path, then it should be using Plug'n'Play
+			trySetupPnp(args.cwd);
+		}
 
 		for (const envVar in args.env) {
 			const val = args.env[envVar];
