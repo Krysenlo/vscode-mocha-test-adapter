@@ -31,6 +31,8 @@ export interface AdapterConfig {
 	testFiles: string[];
 	extraFiles: string[];
 
+	mochaConfigFile: string | undefined;
+	packageFile: string | undefined;
 	mochaOptsFile: string | undefined;
 	envFile: string | undefined;
 	globs: string[];
@@ -165,6 +167,8 @@ export class ConfigReader implements IConfigReader, IDisposable {
 		const optsReader = new MochaOptsReader(this.log);
 		const defaultMochaOptsFile = 'test/mocha.opts';
 		let mochaOptsFile = this.getMochaOptsFile(config);
+		let mochaConfigFile: string | undefined;
+		let packageFile: string | undefined = 'package.json';
 		if (!mochaOptsFile) {
 			if (await fileExists(path.resolve(this.workspaceFolder.uri.fsPath, defaultMochaOptsFile))) {
 				mochaOptsFile = defaultMochaOptsFile;
@@ -177,7 +181,27 @@ export class ConfigReader implements IConfigReader, IDisposable {
 
 		} else {
 
-			optsFromFiles = await optsReader.readOptsUsingMocha(cwd, nodePath);
+			const argv: string[] = [];
+			const configFile = this.getMochaConfigFile(config);
+			if (configFile !== 'default') {
+				if (configFile === null) {
+					argv.push('--no-config');
+				} else {
+					mochaConfigFile = path.resolve(this.workspaceFolder.uri.fsPath, configFile);
+					argv.push('--config', mochaConfigFile);
+				}
+			}
+			const pkgFile = this.getPkgFile(config);
+			if (pkgFile !== 'default') {
+				if (pkgFile === null) {
+					packageFile = undefined;
+					argv.push('--no-package');
+				} else {
+					packageFile = path.resolve(this.workspaceFolder.uri.fsPath, pkgFile);
+					argv.push('--package', packageFile);
+				}
+			}
+			optsFromFiles = await optsReader.readOptsUsingMocha(cwd, nodePath, argv);
 
 		}
 
@@ -205,6 +229,8 @@ export class ConfigReader implements IConfigReader, IDisposable {
 			mochaOpts,
 			testFiles,
 			extraFiles,
+			mochaConfigFile,
+			packageFile,
 			mochaOptsFile,
 			envFile,
 			globs: this.getTestFilesGlobs(config, optsFromFiles.globs),
@@ -274,6 +300,14 @@ export class ConfigReader implements IConfigReader, IDisposable {
 		}
 
 		return false;
+	}
+
+	private getMochaConfigFile(config: vscode.WorkspaceConfiguration): string | null {
+		return config.get<string | null>(configKeys.configFile.key) || null;
+	}
+
+	private getPkgFile(config: vscode.WorkspaceConfiguration): string | null {
+		return config.get<string | null>(configKeys.pkgFile.key) || null;
 	}
 
 	private getMochaOptsFile(config: vscode.WorkspaceConfiguration): string | undefined {
@@ -394,21 +428,23 @@ export class ConfigReader implements IConfigReader, IDisposable {
 			return false;
 		}
 
-		for (const configFile of [ '.mocharc.js', '.mocharc.json', '.mocharc.yaml', '.mocharc.yml', 'package.json' ]) {
-			const resolvedConfigFile = path.resolve(this.workspaceFolder.uri.fsPath, configFile);
-			if (absolutePath === resolvedConfigFile) {
-				return 'config';
+		const config = await this.currentConfig;
+
+		if (!config?.mochaConfigFile) {
+			for (const configFile of [ '.mocharc.js', '.mocharc.json', '.mocharc.yaml', '.mocharc.yml' ]) {
+				const resolvedConfigFile = path.resolve(this.workspaceFolder.uri.fsPath, configFile);
+				if (absolutePath === resolvedConfigFile) {
+					return 'config';
+				}
 			}
 		}
-
-		const config = await this.currentConfig;
 
 		if (!config) {
 			const testFolderPath = path.resolve(this.workspaceFolder.uri.fsPath, 'test');
 			return absolutePath.startsWith(testFolderPath);
 		}
 
-		for (const configFile of [ config.mochaOptsFile, config.envFile, config.launcherScript ]) {
+		for (const configFile of [ config.mochaConfigFile, config.packageFile, config.mochaOptsFile, config.envFile, config.launcherScript ]) {
 			if (configFile) {
 				const resolvedConfigFile = path.resolve(this.workspaceFolder.uri.fsPath, configFile);
 				if (absolutePath === resolvedConfigFile) {
