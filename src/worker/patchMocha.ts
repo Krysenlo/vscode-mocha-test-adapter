@@ -1,4 +1,5 @@
 import os from 'os';
+import * as path from 'path';
 import stackTrace from 'stack-trace';
 
 export interface Location {
@@ -117,7 +118,7 @@ function findCallLocation(
 	const stackFrames = stackTrace.parse(err);
 
 	if (!baseDir) {
-
+		runningFile = path.normalize(runningFile);
 		if (log) log(`Looking for ${runningFile} in ${err.stack}`);
 
 		for (var i = 0; i < stackFrames.length - 1; i++) {
@@ -134,7 +135,7 @@ function findCallLocation(
 		}
 
 	} else {
-
+		baseDir = path.normalize(baseDir);
 		if (log) log(`Looking for ${baseDir} in ${err.stack}`);
 
 		if (baseDir) {
